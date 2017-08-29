@@ -1158,6 +1158,9 @@ static int init_uart(char *dev, struct uart_t *u, int send_break, int raw)
 	if (u->flags & AMP_DEV)
 		flags |= 1 << HCI_UART_CREATE_AMP;
 
+	if (!strncmp(u->type, "qca", 3))
+		flags |= 1 << HCI_UART_RESET_ON_INIT;
+
 	fd = open(dev, O_RDWR | O_NOCTTY);
 	if (fd < 0) {
 		perror("Can't open serial port");
