@@ -893,12 +893,12 @@ int get_value_from_config(char *file_path,char *param)
         return ret;
     }
 
-    while (getline(&line, &bytes_read, pfile) > 0 ) {
+    while (getline(&line, (size_t *)&bytes_read, pfile) > 0 ) {
         if (line[0] != '#'  && line[0] != '\n') {
             pch = memchr(line, '=', strlen(line));
             if (pch != NULL) {
                 position = pch - line;
-                strlcpy(param_str, line, sizeof(param_str));
+                strncpy(param_str, line, sizeof(param_str));
                 if (position >= sizeof(param_str))
                     position = sizeof(param_str) - 1;
                 if (strncmp(param_str, param, position) == 0) {
