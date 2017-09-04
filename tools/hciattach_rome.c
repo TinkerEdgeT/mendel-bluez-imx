@@ -1123,6 +1123,7 @@ int rome_tlv_dnld_req(int fd, int tlv_size)
 {
     int  total_segment, remain_size, i, err = -1;
     unsigned char wait_cc_evt = FALSE;
+    unsigned int rom = rome_ver >> 16;
 
     total_segment = tlv_size/MAX_SIZE_PER_TLV_SEGMENT;
     remain_size = (tlv_size < MAX_SIZE_PER_TLV_SEGMENT)?\
@@ -1163,14 +1164,15 @@ int rome_tlv_dnld_req(int fd, int tlv_size)
 
     for(i = 0; i < total_segment; i++) {
         if((i+1) == total_segment) {
-             if ((rome_ver >= ROME_VER_1_1) && (rome_ver < ROME_VER_3_2) &&
+             if ((rom >= ROME_PATCH_VER_0100) && (rom < ROME_PATCH_VER_0302) &&
                  (gTlv_type == TLV_TYPE_PATCH)) {
                /* If the Rome version is from 1.1 to 3.1
                 * 1. No CCE for the last command segment but all other segment
                 * 2. All the command segments get VSE including the last one
                 */
                 wait_cc_evt = !remain_size ? FALSE: TRUE;
-             } else if ((rome_ver == ROME_VER_3_2) && (gTlv_type == TLV_TYPE_PATCH)) {
+             } else if ((rom == ROME_PATCH_VER_0302) &&
+                             (gTlv_type == TLV_TYPE_PATCH)) {
                 /* If the Rome version is 3.2
                  * 1. None of the command segments receive CCE
                  * 2. No command segments receive VSE except the last one
@@ -1189,13 +1191,14 @@ int rome_tlv_dnld_req(int fd, int tlv_size)
             goto error;
     }
 
-    if ((rome_ver >= ROME_VER_1_1) && (rome_ver < ROME_VER_3_2) && (gTlv_type == TLV_TYPE_PATCH)) {
+    if ((rom >= ROME_PATCH_VER_0100) && (rom < ROME_PATCH_VER_0302) &&
+                                               (gTlv_type == TLV_TYPE_PATCH)) {
        /* If the Rome version is from 1.1 to 3.1
         * 1. No CCE for the last command segment but all other segment
         * 2. All the command segments get VSE including the last one
         */
         wait_cc_evt = remain_size ? FALSE: TRUE;
-    } else if ((rome_ver == ROME_VER_3_2) && (gTlv_type == TLV_TYPE_PATCH)) {
+    } else if ((rom == ROME_PATCH_VER_0302) && (gTlv_type == TLV_TYPE_PATCH)) {
         /* If the Rome version is 3.2
          * 1. None of the command segments receive CCE
          * 2. No command segments receive VSE except the last one
@@ -1818,6 +1821,9 @@ int qca_soc_init(int fd, char *bdaddr)
         case TUFELLO_VER_1_0:
             rampatch_file_path = TF_RAMPATCH_TLV_1_0_0_PATH;
             nvm_file_path = TF_NVM_TLV_1_0_0_PATH;
+        case TUFELLO_VER_1_1:
+            rampatch_file_path = TF_RAMPATCH_TLV_1_0_1_PATH;
+            nvm_file_path = TF_NVM_TLV_1_0_1_PATH;
 
 download:
             /* Change baud rate 115.2 kbps to 3Mbps*/
