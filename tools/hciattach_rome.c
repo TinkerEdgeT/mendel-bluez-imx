@@ -1574,7 +1574,7 @@ static void flow_control(int fd, int opt)
 }
 
 
-int rome_set_baudrate_req(int fd)
+int rome_set_baudrate_req(int fd, int local_baud_rate, int controller_baud_rate)
 {
    int size, err = 0;
     unsigned char cmd[HCI_MAX_CMD_SIZE];
@@ -1588,7 +1588,7 @@ int rome_set_baudrate_req(int fd)
     cmd[0]  = HCI_COMMAND_PKT;
     cmd_hdr->opcode = cmd_opcode_pack(HCI_VENDOR_CMD_OGF, EDL_SET_BAUDRATE_CMD_OCF);
     cmd_hdr->plen     = VSC_SET_BAUDRATE_REQ_LEN;
-    cmd[4]  = BAUDRATE_3000000;
+    cmd[4]  = controller_baud_rate;
 
     /* Total length of the packet to be sent to the Controller */
     size = (HCI_CMD_IND + HCI_COMMAND_HDR_SIZE + VSC_SET_BAUDRATE_REQ_LEN);
@@ -1604,7 +1604,7 @@ int rome_set_baudrate_req(int fd)
         goto error;
     }
     /* Change Local UART baudrate to high speed UART */
-    userial_vendor_set_baud(USERIAL_BAUD_3M);
+    userial_vendor_set_baud(local_baud_rate);
 
     /* Flow on after changing local uart baudrate */
     flow_control(fd, MSM_ENABLE_FLOW_CTRL);
@@ -1630,7 +1630,7 @@ error:
 }
 
 
-int rome_hci_reset_req(int fd)
+int rome_hci_reset_req(int fd, char baud)
 {
     int size, err = 0;
     unsigned char cmd[HCI_MAX_CMD_SIZE];
@@ -1662,7 +1662,7 @@ int rome_hci_reset_req(int fd)
     }
 
     /* Change Local UART baudrate to high speed UART */
-     userial_vendor_set_baud(USERIAL_BAUD_3M);
+     userial_vendor_set_baud(baud);
 
     /* Flow on after changing local uart baudrate */
     flow_control(fd, MSM_ENABLE_FLOW_CTRL);
@@ -1728,10 +1728,69 @@ int read_bd_address(unsigned char *bdaddr)
   return 0;
 }
 
-int qca_soc_init(int fd, char *bdaddr)
+int isSpeedValid(int speed, int *local_baud_rate, int *controller_baud_rate)
+{
+    switch(speed) {
+    case 9600:
+        *local_baud_rate = USERIAL_BAUD_9600;
+        *controller_baud_rate = BAUDRATE_9600;
+        break;
+    case 19200:
+        *local_baud_rate = USERIAL_BAUD_19200;
+        *controller_baud_rate = BAUDRATE_19200;
+        break;
+    case 57600:
+        *local_baud_rate = USERIAL_BAUD_57600;
+        *controller_baud_rate = BAUDRATE_57600;
+        break;
+    case 115200:
+        *local_baud_rate = USERIAL_BAUD_115200;
+        *controller_baud_rate = BAUDRATE_115200;
+        break;
+    case 230400:
+        *local_baud_rate = USERIAL_BAUD_230400;
+        *controller_baud_rate = BAUDRATE_230400;
+        break;
+    case 460800:
+        *local_baud_rate = USERIAL_BAUD_460800;
+        *controller_baud_rate = BAUDRATE_460800;
+        break;
+    case 921600:
+        *local_baud_rate = USERIAL_BAUD_921600;
+        *controller_baud_rate = BAUDRATE_921600;
+        break;
+    case 1000000:
+        *local_baud_rate = USERIAL_BAUD_1M;
+        *controller_baud_rate = BAUDRATE_1000000;
+        break;
+    case 2000000:
+        *local_baud_rate = USERIAL_BAUD_2M;
+        *controller_baud_rate = BAUDRATE_2000000;
+        break;
+    case 3000000:
+        *local_baud_rate = USERIAL_BAUD_3M;
+        *controller_baud_rate = BAUDRATE_3000000;
+        break;
+    case 4000000:
+        *local_baud_rate = USERIAL_BAUD_4M;
+        *controller_baud_rate = BAUDRATE_4000000;
+        break;
+    case 300:
+    case 600:
+    case 1200:
+    case 2400:
+    default:
+        fprintf(stderr, "Invalid baud rate passed!\n");
+        *local_baud_rate = *controller_baud_rate = -1;
+        break;
+    }
+    return -1;
+}
+
+int qca_soc_init(int fd, int speed, char *bdaddr)
 {
     int err = -1;
-    int size;
+    int size, local_baud_rate = 0, controller_baud_rate = 0;
 
     vnd_userial.fd = fd;
 
@@ -1789,7 +1848,7 @@ int qca_soc_init(int fd, char *bdaddr)
                 }
 
                 /* Change baud rate 115.2 kbps to 3Mbps*/
-                err = rome_hci_reset_req(fd);
+                err = rome_hci_reset_req(fd, local_baud_rate);
                 if ( err <0 ) {
                     fprintf(stderr, "HCI Reset Failed !!\n");
                     goto error;
@@ -1821,17 +1880,30 @@ int qca_soc_init(int fd, char *bdaddr)
         case TUFELLO_VER_1_0:
             rampatch_file_path = TF_RAMPATCH_TLV_1_0_0_PATH;
             nvm_file_path = TF_NVM_TLV_1_0_0_PATH;
+            goto download;
         case TUFELLO_VER_1_1:
             rampatch_file_path = TF_RAMPATCH_TLV_1_0_1_PATH;
             nvm_file_path = TF_NVM_TLV_1_0_1_PATH;
 
 download:
-            /* Change baud rate 115.2 kbps to 3Mbps*/
-            err = rome_set_baudrate_req(fd);
-            if (err < 0) {
-                fprintf(stderr, "%s: Baud rate change failed!\n", __FUNCTION__);
-                goto error;
+            /* Check if user requested for 115200 kbps */
+            if (speed == 115200) {
+                local_baud_rate = USERIAL_BAUD_115200;
+                controller_baud_rate = BAUDRATE_115200;
             }
+            else {
+                /* Change only if baud rate requested is valid or not */
+                isSpeedValid(speed, &local_baud_rate, &controller_baud_rate);
+                if (local_baud_rate < 0 || controller_baud_rate < 0) {
+                    err = -1;
+                    goto error;
+                }
+                err = rome_set_baudrate_req(fd, local_baud_rate, controller_baud_rate);
+                if (err < 0) {
+                    fprintf(stderr, "%s: Baud rate change failed!\n", __FUNCTION__);
+                   goto error;
+                }
+             }
             fprintf(stderr, "%s: Baud rate changed successfully \n", __FUNCTION__);
 
             /* Donwload TLV files (rampatch, NVM) */
@@ -1842,8 +1914,17 @@ download:
             }
             fprintf(stderr, "%s: Download TLV file successfully \n", __FUNCTION__);
 
+            /*
+             * Overriding the baud rate value in NVM file with the user
+             * requested baud rate, since default baud rate in NVM file is 3M.
+             */
+            err = rome_set_baudrate_req(fd, local_baud_rate, controller_baud_rate);
+            if (err < 0) {
+                fprintf(stderr, "%s: Baud rate change failed!\n", __FUNCTION__);
+                goto error;
+            }
             /* Perform HCI reset here*/
-            err = rome_hci_reset_req(fd);
+            err = rome_hci_reset_req(fd, local_baud_rate);
             if ( err <0 ) {
                 fprintf(stderr, "HCI Reset Failed !!!\n");
                 goto error;
